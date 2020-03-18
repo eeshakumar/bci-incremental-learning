@@ -1,0 +1,6 @@
+README.md
+setup.py
+bci_incremental_learning.egg-info/PKG-INFO
+bci_incremental_learning.egg-info/SOURCES.txt
+bci_incremental_learning.egg-info/dependency_links.txt
+bci_incremental_learning.egg-info/top_level.txt
