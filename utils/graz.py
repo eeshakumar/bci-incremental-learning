@@ -4,120 +4,86 @@ import numpy as np
 import scipy.io
 
 
-class GrazB(Dataset):
-    """An NST dataset.
-
-    An NST dataset usually consists of three files that are within a specific
-    subdirectory. The implementation follows this structuring, i.e. the user
-    needs to pass a base-directory as well as the identifier upon instantiation.
-
+class Graz(Dataset):
+    """
+    Graz dataset from BCNI2020 competition.
+    http://bnci-horizon-2020.eu/database/data-sets
     """
 
-    def __init__(self, base_dir, identifier, **kwargs):
-        """Initialize a GrazB dataset without loading it.
-
-        Args:
-            base_dir (str): The path to the base directory in which the GrazB dataset resides.
-            identifier (str): String identifier for the dataset, e.g. `B01`
-            **kwargs: Arbitrary keyword arguments (unused).
-
+    def __init__(self, base_dir, identifier, trail_len, cue_interval, trial_offset, expected_freq, **kwargs):
+        """
+        Init Graz data specifics. trial_len, cue_interval, cue_offset and
+        expected_freq are expected depending on supporting literature.
         """
 
-        super(GrazB, self).__init__(**kwargs)
+        super(Graz, self).__init__(**kwargs)
 
         self.base_dir = base_dir
         self.data_id = identifier
         self.data_dir = base_dir
-        self.data_type = "EEG"
-        self.data_name = "GrazB"
 
-        # parameters of the GrazB dataset
-        # length of a trial (in seconds)
-        self.trial_len = 8
-        # motor imagery appears in interval (in seconds)
-        self.mi_interval = [4, 7]
-        # idle perior prior to start of signal (in seconds)
-        self.trial_offset = 0
-        # total length of a trial (in seconds)
-        self.trial_total = self.trial_len
-        # sampling frequency (in Hz)
-        self.expected_freq_s = 512
+        self.trial_len = trail_len
+        self.cue_interval = cue_interval
+        self.trial_offset = trial_offset
+        self.expected_freq = expected_freq
 
-        # the graz dataset is split into T and E files
-        self.fT = os.path.join(self.data_dir, "{id}T.mat".format(id=self.data_id))
-        self.fE = os.path.join(self.data_dir, "{id}E.mat".format(id=self.data_id))
+        # the graz dataset is split into (T)raining and (E)valuation files
+        self.matT = os.path.join(self.data_dir, "{id}T.mat".format(id=self.data_id))
+        self.matE = os.path.join(self.data_dir, "{id}E.mat".format(id=self.data_id))
 
-        for f in [self.fT, self.fE]:
+        for f in [self.matT, self.matE]:
             if not os.path.isfile(f):
                 raise DatasetError(
-                    "GrazB Dataset ({id}) file '{f}' unavailable".format(id=self.data_id, f=f)
+                    "Graz Dataset ({id}) file '{f}' unavailable".format(id=self.data_id, f=f)
                 )
 
         # variables to store data
-        self.raw_data = None
+        self.eeg_data = None
         self.labels = None
         self.trials = None
         self.sampling_freq = None
 
     def load(self, **kwargs):
-        """Load a dataset.
-
-        Args:
-            **kwargs: Arbitrary keyword arguments (unused).
-
-        Returns:
-            Instance to the dataset (i.e. `self`).
+        """
+        Load a dataset. The array from mat1, mat2 can be printed to figure values.
 
         """
+        mat1 = scipy.io.loadmat(self.matT)["data"]
+        mat2 = scipy.io.loadmat(self.matE)["data"]
 
-        mat1 = scipy.io.loadmat(self.fT)["data"]
-        # mat2 = scipy.io.loadmat(folder_dir + file_dir2)['data']
-        # dict_keys(['__header__', '__globals__', '__version__', 'data'])
-
-        # Load Test Data
+        # EEG Data 0 C3 1 Cz 2 C4
         data_bt = []
         labels_bt = []
         trials_bt = []
         n_experiments = 3
-        # print(mat1[0,1])
         for i in range(n_experiments):
 
             data = mat1[0, i][0][0][0]
             trials = mat1[0, i][0][0][1]
             labels = mat1[0, i][0][0][2] - 1
-            # print(labels)
-            # TODO: fs shadows self.fs? do we need to store this somewhere?
             fs = mat1[0, i][0][0][3].flatten()[0]
-            if fs != self.expected_freq_s:
+            if fs != self.expected_freq:
                 raise DatasetError(
-                    "GrazB Dataset ({id}) Sampling Frequencies don't match (expected {f1}, got {f2})".format(
-                        id=self.data_id, f1=self.expected_freq_s, f2=fs
+                    "Frequency mismatch (expected {}, got {})".format(
+                        self.expected_freq, fs
                     )
                 )
-            # artifacts = mat1[0, i][0][0][5]
-            # # remove artifacts
-            # artifact_idxs = np.where(artifacts == 1)[0]
-            # trials = np.delete(trials, artifact_idxs)
-            # labels = np.delete(labels, artifact_idxs)
-            # add data to files
             data_bt.append(data)
             labels_bt.append(labels)
             trials_bt.append(trials)
 
-        # add length of previous data set to adjust trial start points
         trials_bt[1] += data_bt[0].shape[0]
         trials_bt[2] += data_bt[0].shape[0] + data_bt[1].shape[0]
 
-        # concatenate all data mat, trials, and labels
         data_bt = np.concatenate((data_bt[0], data_bt[1], data_bt[2]))
         trials_bt = np.concatenate((trials_bt[0], trials_bt[1], trials_bt[2]))
         labels_bt = np.concatenate((labels_bt[0], labels_bt[1], labels_bt[2]))
 
-        self.raw_data = data_bt[:, :3]
+        self.eeg_data = data_bt[:, :3]
         self.trials = trials_bt
         self.trials = self.trials.ravel()
         self.labels = labels_bt
         self.labels = self.labels.ravel()
-        self.sampling_freq = self.expected_freq_s
+        self.sampling_freq = self.expected_freq
 
         return self
